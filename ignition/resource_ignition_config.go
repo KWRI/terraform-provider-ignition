@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
-	"github.com/coreos/ignition/config/v3_0/types"
+	"github.com/coreos/ignition/v2/config/v3_0/types"
 )
 
 var configReferenceResource = &schema.Resource{
@@ -61,11 +61,6 @@ func dataSourceConfig() *schema.Resource {
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"systemd": {
-				Type:     schema.TypeList,
-				Optional: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
-			},
-			"networkd": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
@@ -157,51 +152,24 @@ func buildConfig(d *schema.ResourceData) (*types.Config, error) {
 		return nil, err
 	}
 
-	config.Networkd, err = buildNetworkd(d)
-	if err != nil {
-		return nil, err
-	}
-
 	config.Passwd, err = buildPasswd(d)
 	if err != nil {
 		return nil, err
 	}
 
-	return config, handleReport(config.Validate())
+	return config, nil
 }
 
 func buildIgnition(d *schema.ResourceData) (types.Ignition, error) {
-	var err error
 
 	i := types.Ignition{}
 	i.Version = types.MaxVersion.String()
-
-	rr := d.Get("replace.0").(map[string]interface{})
-	if len(rr) != 0 {
-		i.Config.Replace, err = buildConfigReference(rr)
-		if err != nil {
-			return i, err
-		}
-	}
-
-	ar := d.Get("append").([]interface{})
-	if len(ar) != 0 {
-		for _, rr := range ar {
-			r, err := buildConfigReference(rr.(map[string]interface{}))
-			if err != nil {
-				return i, err
-			}
-
-			i.Config.Append = append(i.Config.Append, *r)
-		}
-	}
 
 	return i, nil
 }
 
 func buildConfigReference(raw map[string]interface{}) (*types.ConfigReference, error) {
 	r := &types.ConfigReference{}
-	r.Source = raw["source"].(string)
 
 	hash := raw["verification"].(string)
 	if hash != "" {
@@ -321,26 +289,6 @@ func buildSystemd(d *schema.ResourceData) (types.Systemd, error) {
 
 	return systemd, nil
 
-}
-
-func buildNetworkd(d *schema.ResourceData) (types.Networkd, error) {
-	networkd := types.Networkd{}
-
-	for _, unit := range d.Get("networkd").([]interface{}) {
-		if unit == nil {
-			continue
-		}
-
-		u := types.Networkdunit{}
-		err := json.Unmarshal([]byte(unit.(string)), &u)
-		if err != nil {
-			return networkd, errors.Wrap(err, "No valid JSON found, make sure you're using .rendered and not .id")
-		}
-
-		networkd.Units = append(networkd.Units, u)
-	}
-
-	return networkd, nil
 }
 
 func buildPasswd(d *schema.ResourceData) (types.Passwd, error) {
